@@ -17,3 +17,15 @@ navigate to the project directory and run the following code
 python main.py [--webcam-resolution <width> <height>]
 ```
 
+
+## Warnings
+
+The python script uses the 2nd Video Capture/webcam by default, just change the following code to select the only available video capture device available.
+```python
+# change the following code from this:
+cap = cv2.VideoCapture(1, cv2.CAP_DSHOW)
+
+# To this:
+cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+```
+
