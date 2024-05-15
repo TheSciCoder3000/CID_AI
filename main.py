@@ -1,116 +1,134 @@
 import cv2
-import argparse
 from ultralytics import YOLO
 import supervision as sv
 import numpy as np
-import serial
-import serial.tools.list_ports
-import sys
-# ============================= GLOBAL VARIABLES =============================
+import time
+from util import *
 
-car_thresh = 6
-# TODO: adjust zone polygon
+# ============================= GLOBAL VARIABLES =============================
 ZONE_POLYGON = np.array([
-    [0,0],
-    [0.5, 0],
-    [0.5, 1],
-    [0,1]
+    [0.17,.5],
+    [0.78, 0.2],
+    [1, 0.43],
+    [0.33,0.95]
 ])
 
-def port_identifier():
-    ports = serial.tools.list_ports.comports()
-    portsList = {}
-    print("---------------------- ALL AVAILABLE COM PORTS ----------------------")
-    print(" ")
-    for port, desc, hwid in sorted(ports):
-       
-        print("{}: {} [{}]".format(port, desc, hwid))
-        portsList[port] = desc
-    return portsList
-
-def getSerial(COM, coms):
-    if COM in coms:
-        ser = serial.Serial('COM12', 9600)
-        Serial_Command = input("Command: ")
-        if Serial_Command == "OFF":
-            ser.close()
-            return None
-        else:
-            ser.write(bytearray(Serial_Command, 'ascii'))
-            return ser
-
-def parse_arguments() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="YOLOv8 live")
-    parser.add_argument("--webcam-resolution", default=[1280, 720], nargs=2, type=int)
-    args = parser.parse_args()
-    return args
 
 def main():
-    isGo = False
-    args = parse_arguments()
-    frame_width, frame_height = args.webcam_resolution
+  # ============================= CONFIGURATION =============================
+  max_time = 0
+  start_count = False
+  frame_count = 0
+  car_detection_total = 0
+  car_detection_avg = 0
+  isGo = False
+  num_frames = 5
+  args = parse_arguments()
+  frame_width, frame_height = args.webcam_resolution
+  
+  go_time = 15
+  stop_time = 60
+  
+  prev_car_count = 0
+  car_weight = 0.05
+  
+  
+  # ============================= VIDEO CAPTURE INITIALIZATION =============================
+  cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+  cap.set(cv2.CAP_PROP_FRAME_WIDTH, frame_width)
+  cap.set(cv2.CAP_PROP_FRAME_HEIGHT, frame_height)
+  
+  
+  # ============================= YOLOV8 MODEL INITIALIZATION =============================
+  model = YOLO("yolov8l.pt")
 
-    # ============================= VIDEO CAPTURE INITIALIZATION =============================
+  bounding_box_annotator = sv.BoundingBoxAnnotator(thickness=2)
+  label_annotator = sv.LabelAnnotator(text_thickness=2, text_scale=1)
 
-    cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, frame_width)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, frame_height)
+  polygon = (ZONE_POLYGON * np.array(args.webcam_resolution)).astype(int)
+  zone = sv.PolygonZone(polygon=polygon)
+  zone_annotator = sv.PolygonZoneAnnotator(zone=zone, color=sv.Color.RED)
+
+
+  # ============================= SERIAL PORT INITIALIZATION =============================
+  COM_ports = port_identifier()
+
+  COM = input("COM Port: ")
+  
+  ser = getSerial(COM, COM_ports)
+  ser.write(bytearray('STOP\n','ascii'))
+  
+
+  # ============================= MAIN PROGRAM EXECUTION =============================
+  while True:
+    # --------------------------- Get Predictions from Yolov8 ---------------------------
+    ret, frame = cap.read()
+    result = model(frame, agnostic_nms=True, verbose=False)[0]
+
+    detections = sv.Detections.from_ultralytics(result)
+    detections = detections[np.isin(detections.class_id, [1,2,3,5,7])]
     
-    # ============================= YOLOV8 MODEL INITIALIZATION =============================
-
-    model = YOLO("yolov8l.pt")
-
-    bounding_box_annotator = sv.BoundingBoxAnnotator(thickness=2)
-    label_annotator = sv.LabelAnnotator(text_thickness=2, text_scale=1)
-
-    polygon = (ZONE_POLYGON * np.array(args.webcam_resolution)).astype(int)
-    zone = sv.PolygonZone(polygon=polygon)
-    zone_annotator = sv.PolygonZoneAnnotator(zone=zone, color=sv.Color.RED)
-
-    # ============================= SERIAL PORT INITIALIZATION =============================
-
-    COM_ports = port_identifier()
-
-    COM = input("COM Port: ")
     
-    ser = getSerial(COM, COM_ports)
+    # --------------------------- Initialize Annotations ---------------------------
+    labels = [
+        f"{model.model.names[class_id]} {confidence:0.2f}"
+        for _, _, confidence, class_id, _, _
+        in detections
+    ]
+    frame = bounding_box_annotator.annotate(scene=frame, detections=detections)
+    frame = label_annotator.annotate(scene=frame, detections=detections, labels=labels)
 
-    # ============================= MAIN PROGRAM EXECUTION =============================
-    while True:
-        ret, frame = cap.read()
-        result = model(frame, agnostic_nms=True, verbose=False)[0]
+    zone_detects = zone.trigger(detections=detections)
+    count_zone_detects = np.count_nonzero(zone_detects)
 
-        detections = sv.Detections.from_ultralytics(result)
-        detections = detections[np.isin(detections.class_id, [1,2,3,5,7])]
-        # detections = detections[detections.confidence > 0.5]
-        labels = [
-            f"{model.model.names[class_id]} {confidence:0.2f}"
-            for _, _, confidence, class_id, _, _
-            in detections
-        ]
-        frame = bounding_box_annotator.annotate(scene=frame, detections=detections)
-        frame = label_annotator.annotate(scene=frame, detections=detections, labels=labels)
+    frame = zone_annotator.annotate(scene=frame)
 
-        zone_detects = zone.trigger(detections=detections)
-        count_zone_detects = np.count_nonzero(zone_detects)
+    # Show frame with annotations
+    cv2.imshow("yolov8", frame)
 
-        frame = zone_annotator.annotate(scene=frame)
-
-        cv2.imshow("yolov8", frame)
-        
-        if (count_zone_detects > car_thresh and not isGo):
-            isGo = True
-            ser.write(bytearray('GO\n','ascii'))
-            print('GO')
-        elif (count_zone_detects <= car_thresh and isGo):
-            isGo = False
-            ser.write(bytearray('STOP\n','ascii'))
-            print('STOP')
-
-        if (cv2.waitKey(30) == 27):
-            ser.close()
-            print("closing port")
-            break
+    if (frame_count >= num_frames):
+      car_detection_avg = round(car_detection_total / frame_count)
+      car_detection_total = 0
+      frame_count = 0
+    else:
+      car_detection_total += count_zone_detects
+      frame_count += 1
+    
+    
+    # --------------------------- Traffic Light Logic ---------------------------
+    if car_detection_avg > 0 and not start_count:
+      max_time = time.time() + stop_time
+      start_count = True
+    elif car_detection_avg < 1 and start_count and not isGo:
+      max_time = 0
+      start_count = False
+      
+    print(max_time - time.time())
+    
+    if (max_time - time.time()) > 5 and not isGo and prev_car_count < car_detection_avg:
+          max_time -= ((stop_time * car_weight) * car_detection_avg)
+          prev_car_count = car_detection_avg
+    
+    if time.time() > max_time and start_count:
+      if (not isGo):
+          isGo = True
+          if ser:
+              ser.write(bytearray('GO\n','ascii'))
+          print("GO")
+          max_time = time.time() + go_time
+          prev_car_count = 0
+      else:
+          isGo = False
+          if ser: 
+              ser.write(bytearray('STOP\n','ascii'))
+          print("STOP")
+          
+          max_time = time.time() + stop_time
+    
+    if (cv2.waitKey(30) == 27):
+        ser.close()
+        print("closing port")
+        break
 
 
 if __name__ == '__main__':
