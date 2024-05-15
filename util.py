@@ -2,6 +2,7 @@ import argparse
 import serial
 import serial.tools.list_ports
 import time
+from typing import List
 
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="YOLOv8 live")
@@ -9,7 +10,8 @@ def parse_arguments() -> argparse.Namespace:
     args = parser.parse_args()
     return args
 
-def port_identifier():
+def port_identifier() -> List[str]:
+    """Retruns a List of PORTS available"""
     ports = serial.tools.list_ports.comports()
     portsList = {}
     print("---------------------- ALL AVAILABLE COM PORTS ----------------------")
@@ -19,7 +21,8 @@ def port_identifier():
         portsList[port] = desc
     return portsList
 
-def getSerial(COM, coms):
+def getSerial(COM: str, coms: List[str]):
+    """Returns a serial object from `COM` input and list of `coms`"""
     if COM in coms:
         ser = serial.Serial(COM, 9600)
         time.sleep(5)

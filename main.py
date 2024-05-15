@@ -16,21 +16,21 @@ ZONE_POLYGON = np.array([
 
 def main():
   # ============================= CONFIGURATION =============================
-  max_time = 0
-  start_count = False
+  max_time = 0                        # max time for countdown GO and STOP
+  start_count = False                 # traffic counter state
   frame_count = 0
   car_detection_total = 0
-  car_detection_avg = 0
-  isGo = False
+  car_detection_avg = 0               # Average number of cars detected
+  isGo = False                        # Traffic light state
   num_frames = 5
   args = parse_arguments()
   frame_width, frame_height = args.webcam_resolution
   
-  go_time = 15
-  stop_time = 60
+  go_time = 15                        # Number of seconds for GREEN light
+  stop_time = 60                      # Number of seconds for RED light
   
   prev_car_count = 0
-  car_weight = 0.05
+  car_weight = 0.05                   # Decrement ratio per car
   
   
   # ============================= VIDEO CAPTURE INITIALIZATION =============================
@@ -56,7 +56,8 @@ def main():
   COM = input("COM Port: ")
   
   ser = getSerial(COM, COM_ports)
-  ser.write(bytearray('STOP\n','ascii'))
+  if ser:
+    ser.write(bytearray('STOP\n','ascii'))
   
 
   # ============================= MAIN PROGRAM EXECUTION =============================
@@ -66,7 +67,7 @@ def main():
     result = model(frame, agnostic_nms=True, verbose=False)[0]
 
     detections = sv.Detections.from_ultralytics(result)
-    detections = detections[np.isin(detections.class_id, [1,2,3,5,7])]
+    detections = detections[np.isin(detections.class_id, [1,2,3,5,7])]      # filter detections to vehicles only
     
     
     # --------------------------- Initialize Annotations ---------------------------
@@ -86,6 +87,7 @@ def main():
     # Show frame with annotations
     cv2.imshow("yolov8", frame)
 
+    # --------------------------- Traffic Light Logic ---------------------------
     if (frame_count >= num_frames):
       car_detection_avg = round(car_detection_total / frame_count)
       car_detection_total = 0
@@ -95,7 +97,6 @@ def main():
       frame_count += 1
     
     
-    # --------------------------- Traffic Light Logic ---------------------------
     if car_detection_avg > 0 and not start_count:
       max_time = time.time() + stop_time
       start_count = True
@@ -125,10 +126,13 @@ def main():
           
           max_time = time.time() + stop_time
     
+    
+    # Close window if 'Esc' key is pressed
     if (cv2.waitKey(30) == 27):
+      if ser:
         ser.close()
-        print("closing port")
-        break
+      print("closing port")
+      break
 
 
 if __name__ == '__main__':
