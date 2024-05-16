@@ -4,6 +4,7 @@ import supervision as sv
 import numpy as np
 import time
 from util import *
+import matplotlib.pyplot as plt
 
 # ============================= GLOBAL VARIABLES =============================
 ZONE_POLYGON = np.array([
@@ -31,6 +32,11 @@ def main():
   
   prev_car_count = 0
   car_weight = 0.05                   # Decrement ratio per car
+  
+  time_in = 0
+  fps_arr = []
+  time_start = time.time()
+  time_arr = []
   
   
   # ============================= VIDEO CAPTURE INITIALIZATION =============================
@@ -62,8 +68,10 @@ def main():
 
   # ============================= MAIN PROGRAM EXECUTION =============================
   while True:
+    time_in = time.time()
     # --------------------------- Get Predictions from Yolov8 ---------------------------
     ret, frame = cap.read()
+    
     result = model(frame, agnostic_nms=True, verbose=False)[0]
 
     detections = sv.Detections.from_ultralytics(result)
@@ -104,7 +112,7 @@ def main():
       max_time = 0
       start_count = False
       
-    print(max_time - time.time())
+    # print(max_time - time.time())
     
     if (max_time - time.time()) > 5 and not isGo and prev_car_count < car_detection_avg:
           max_time -= ((stop_time * car_weight) * car_detection_avg)
@@ -125,7 +133,20 @@ def main():
           print("STOP")
           
           max_time = time.time() + stop_time
+          
+    exec_time = time.time() - time_in
+    print(f"{1/exec_time} fps")
+    fps_arr.append(1/exec_time)
+    time_arr.append(time.time() - time_start)
     
+    # Plot live FPS graph
+    # plt.clf()
+    plt.plot(fps_arr, label='FPS', color='blue')
+    plt.xlabel('Time (seconds)')
+    plt.ylabel('FPS')
+    plt.title('Live FPS Graph')
+    plt.grid(True)
+    plt.pause(0.01)
     
     # Close window if 'Esc' key is pressed
     if (cv2.waitKey(30) == 27):
