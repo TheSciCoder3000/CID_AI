@@ -111,7 +111,7 @@ def main():
       max_time = 0
       start_count = False
       
-    # print(max_time - time.time())
+    print(max_time - time.time())
     
     if (max_time - time.time()) > 5 and not isGo and prev_car_count < car_detection_avg:
           max_time -= ((stop_time * car_weight) * car_detection_avg)
@@ -132,11 +132,6 @@ def main():
           print("STOP")
           
           max_time = time.time() + stop_time
-          
-    exec_time = time.time() - time_in
-    print(f"{1/exec_time} fps")
-    fps_arr.append(1/exec_time)
-    time_arr.append(time.time() - time_start)
     
     # Close window if 'Esc' key is pressed
     if (cv2.waitKey(30) == 27):
