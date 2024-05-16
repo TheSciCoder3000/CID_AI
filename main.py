@@ -4,7 +4,6 @@ import supervision as sv
 import numpy as np
 import time
 from util import *
-import matplotlib.pyplot as plt
 
 # ============================= GLOBAL VARIABLES =============================
 ZONE_POLYGON = np.array([
@@ -138,15 +137,6 @@ def main():
     print(f"{1/exec_time} fps")
     fps_arr.append(1/exec_time)
     time_arr.append(time.time() - time_start)
-    
-    # Plot live FPS graph
-    # plt.clf()
-    plt.plot(fps_arr, label='FPS', color='blue')
-    plt.xlabel('Time (seconds)')
-    plt.ylabel('FPS')
-    plt.title('Live FPS Graph')
-    plt.grid(True)
-    plt.pause(0.01)
     
     # Close window if 'Esc' key is pressed
     if (cv2.waitKey(30) == 27):
